@@ -1,5 +1,6 @@
 # ModbusTool
 ## A modbus TCP and RTU master and slave tool with import and export functionality.
+## 具有导入和导出功能的modbus TCP和RTU主从工具。
 
 <a href="https://www.buymeacoffee.com/r4K2HIB" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a>
 
