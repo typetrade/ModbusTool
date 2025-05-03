@@ -1,5 +1,7 @@
 ﻿using System;
+using System.ComponentModel;
 using System.IO.Ports;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
@@ -18,6 +20,7 @@ namespace ModbusMaster
         private SerialPort _uart;
 
         private byte _lastReadCommand = 0;
+        private BackgroundWorker searchPortNameWorker = new BackgroundWorker();
 
         #region Form
 
@@ -282,7 +285,103 @@ namespace ModbusMaster
 
         private void MasterForm_Load(object sender, EventArgs e)
         {
+            searchPortNameWorker.WorkerSupportsCancellation = true;
+            if (!searchPortNameWorker.IsBusy)
+            {
+                searchPortNameWorker.DoWork += SearchPortNameWorker_DoWork;
+                searchPortNameWorker.RunWorkerCompleted += BackgroundWorker_RunWorkerCompleted;
+                searchPortNameWorker.RunWorkerAsync();
+            }
+        }
 
+        // 查端口
+        // Detects serial port connection and disconnection events in Windows using WMI (Windows Management Instrumentation). This library monitors serial port availability in real-time, enabling dynamic response to new port connections and disconnections.
+        // https://github.com/shubham0x13/SerialPortWatcher
+        private void SearchPortNameWorker_DoWork(object sender, DoWorkEventArgs e)
+        {
+            BackgroundWorker bw = sender as BackgroundWorker;
+            // 这里放置后台任务的代码
+            while (bw != null && !bw.CancellationPending)
+            {
+                bool isOpen = false;
+                if (_uart != null && _uart.IsOpen)
+                {
+                    isOpen = true;
+                }
+
+                // 搜索串口
+                string portName = string.Empty;
+                this.Invoke((MethodInvoker)delegate
+                {
+                    portName = comboBoxSerialPorts.Text;
+                });
+                string[] portNames = SerialPort.GetPortNames();
+                if (!isOpen)
+                {
+                    // 如果未连接，就一直更新下拉列表
+                    // 更新UI前，使用Control.Invoke将更新委托到UI线程
+                    this.Invoke((MethodInvoker)delegate
+                    {
+                        portName = comboBoxSerialPorts.Text;
+                        comboBoxSerialPorts.Items.Clear();
+                        foreach (var port in portNames)
+                        {
+                            comboBoxSerialPorts.Items.Add(port);
+                        }
+                        if (string.IsNullOrWhiteSpace(portName))
+                        {
+                            if (comboBoxSerialPorts.Items.Count > 0)
+                                comboBoxSerialPorts.SelectedIndex = 0;
+                        }
+                        else
+                        {
+                            int selectedIndex = 0;
+                            for (int i = 0; i < comboBoxSerialPorts.Items.Count; i++)
+                            {
+                                if (comboBoxSerialPorts.Items[i].ToString() == portName)
+                                    selectedIndex = i;
+                            }
+                            if (comboBoxSerialPorts.Items.Count > 0)
+                                comboBoxSerialPorts.SelectedIndex = selectedIndex;
+                        }
+                    });
+                }
+
+                //如果已连接，只要连接的串口还在，就不更新，如果串口不在了，就自动断开连接
+                this.Invoke((MethodInvoker)delegate
+                {
+                    if ((!string.IsNullOrWhiteSpace(portName) && !portNames.Contains(portName)) || comboBoxSerialPorts.Items.Count == 0)
+                    {
+                        // 自动断开链接
+                        if(buttonDisconnect.Enabled)
+                        {
+                            _uart?.Close();
+                            AppendLog($"Serial Port Disconnected : {portName}.");
+
+                            // 发送取消信号
+                            DoDisconnect();
+                            btnConnect.Enabled = true;
+                            buttonDisconnect.Enabled = false;
+                            groupBoxFunctions.Enabled = false;
+                            groupBoxMode.Enabled = true;
+                            grpExchange.Enabled = true;
+                            SetMode();
+                            AppendLog("Disconnected");
+                        }
+                    }
+                });
+
+                // 1秒执行一次
+                System.Threading.Thread.Sleep(1000);
+            }
+
+            e.Cancel = true;
+        }
+
+        private void BackgroundWorker_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
+        {
+            // 任务完成时的UI更新
+            //MessageBox.Show("任务完成！");
         }
     }
 }
